@@ -8,7 +8,6 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS - один раз!
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
@@ -19,19 +18,16 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Gemini AI сервис
 builder.Services.AddHttpClient<GeminiService>();
 builder.Services.AddScoped<GeminiService>();
 
-// База данных - поддержка и localhost и Render!
 var connectionString = Environment.GetEnvironmentVariable("DATABASE_URL");
 
 if (!string.IsNullOrEmpty(connectionString))
 {
-   
     var uri = new Uri(connectionString);
-    var userInfo = uri.UserInfo.Split(':',2);
-    var password = Uri.UnescapeDataString(userInfo[1]); 
+    var userInfo = uri.UserInfo.Split(':', 2);
+    var password = Uri.UnescapeDataString(userInfo[1]);
 
     connectionString = $"Host={uri.Host};" +
                       $"Port={uri.Port};" +
@@ -43,7 +39,6 @@ if (!string.IsNullOrEmpty(connectionString))
 }
 else
 {
-    // Локальный PostgreSQL
     connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 }
 
@@ -52,25 +47,33 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 var app = builder.Build();
 
-// CORS должен быть первым!
 app.UseCors("AllowAll");
 
-// Auto migrate при запуске
+// Auto migrate
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     db.Database.Migrate();
 }
 
-if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
+// Swagger всегда включён
+app.UseSwagger();
+app.UseSwaggerUI(c =>
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
-
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "MAI API v1");
+    c.RoutePrefix = "swagger";
+});
 
 app.UseAuthorization();
 app.MapControllers();
+
+// Root endpoint ← ДОБАВИЛИ!
+app.MapGet("/", () => Results.Ok(new
+{
+    status = "MAI Backend is running! 🚀",
+    version = "1.0",
+    swagger = "/swagger",
+    timestamp = DateTime.UtcNow
+}));
 
 app.Run();
