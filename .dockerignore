@@ -1,0 +1,14 @@
+# Ignore build artifacts
+bin/
+obj/
+.vs/
+*.user
+appsettings.Development.json
+
+# Ignore version control systems
+.git
+.gitignore
+
+# Ignore IDE settings
+.idea
+.vscode
