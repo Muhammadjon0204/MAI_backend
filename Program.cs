@@ -28,9 +28,12 @@ if (!string.IsNullOrEmpty(connectionString))
     var uri = new Uri(connectionString);
     var userInfo = uri.UserInfo.Split(':', 2);
     var password = Uri.UnescapeDataString(userInfo[1]);
+    
+    // Порт по умолчанию 5432 если не указан
+    var port = uri.Port > 0 ? uri.Port : 5432;
 
     connectionString = $"Host={uri.Host};" +
-                      $"Port={uri.Port};" +
+                      $"Port={port};" +
                       $"Database={uri.AbsolutePath.TrimStart('/')};" +
                       $"Username={userInfo[0]};" +
                       $"Password={password};" +
