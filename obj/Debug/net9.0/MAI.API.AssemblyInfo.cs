@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("MAI.API")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+dfc4a23652f9988febab1462208e5f1acd27ddf7")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3b281305630a6f6b55b9046ce88ee2cc3dd5eff9")]
 [assembly: System.Reflection.AssemblyProductAttribute("MAI.API")]
 [assembly: System.Reflection.AssemblyTitleAttribute("MAI.API")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
