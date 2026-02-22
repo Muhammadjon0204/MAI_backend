@@ -1,0 +1,28 @@
+# .NET Core
+bin/
+obj/
+*.user
+*.swo
+*.log
+*.vspsscc
+*.vsssscc
+*.dbmdl
+*.bak
+*.backup
+*.mdf
+*.ndf
+*.sql
+*.pdb
+*.cache
+
+# Конфиги с секретами
+appsettings.json
+
+# IDE
+.vscode/
+.idea/
+*.sln.docstates
+
+# Docker
+.dockerignore
+Dockerfile
