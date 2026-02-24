@@ -39,8 +39,12 @@ public async Task StreamSolution([FromQuery] string problem, CancellationToken c
     }
     catch (OperationCanceledException) { /* пользователь нажал Стоп — ок */ }
 
+try
+{
     await Response.WriteAsync("data: [DONE]\n\n");
     await Response.Body.FlushAsync();
+}
+catch (OperationCanceledException) { }
 }
 
         [HttpPost("solve")]
