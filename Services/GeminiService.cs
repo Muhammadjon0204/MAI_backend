@@ -188,7 +188,91 @@ namespace MAI.API.Services
 
             return answer ?? string.Empty;
         }
+public async IAsyncEnumerable<string> SolveProblemStreamAsync(string problem, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
+{
+    var models = new[] { "gemini-2.0-flash", "gemini-2.5-flash" };
+    var url = $"https://generativelanguage.googleapis.com/v1beta/models/{models[0]}:streamGenerateContent?alt=sse&key={_apiKey}";
+
+    var systemPrompt = @"Ты — МАИ (Math AI Assistant), умный AI-помощник созданный для помощи студентам. Отвечай на русском языке или на языке вопроса. Если это математическая задача — покажи пошаговое решение.";
+
+    var requestBody = new
+    {
+        contents = new[]
+        {
+            new
+            {
+                parts = new[]
+                {
+                    new { text = $"{systemPrompt}\n\nВопрос: {problem}" }
+                }
+            }
+        },
+        generationConfig = new
+        {
+            temperature = 0.7,
+            maxOutputTokens = 2000,
+        }
+    };
+
+    var json = JsonSerializer.Serialize(requestBody);
+    var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+    // Используем отдельный клиент без таймаута для стриминга
+    using var client = new HttpClient();
+    client.Timeout = TimeSpan.FromSeconds(120);
+
+    HttpResponseMessage response;
+    try
+    {
+        response = await client.PostAsync(url, content, cancellationToken);
+    }
+    catch (Exception ex)
+    {
+        _logger.LogError($"Stream request failed: {ex.Message}");
+        yield break;
+    }
+
+    if (!response.IsSuccessStatusCode)
+    {
+        _logger.LogError($"Stream API error: {response.StatusCode}");
+        yield break;
+    }
+
+    using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+    using var reader = new System.IO.StreamReader(stream);
+
+    while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+    {
+        var line = await reader.ReadLineAsync();
+        if (line == null) break;
         
+        // SSE формат: "data: {...json...}"
+        if (!line.StartsWith("data: ")) continue;
+        
+        var data = line.Substring(6).Trim();
+        if (data == "[DONE]") break;
+
+        string? chunk = null;
+        try
+        {
+            var jsonElement = JsonSerializer.Deserialize<JsonElement>(data);
+            chunk = jsonElement
+                .GetProperty("candidates")[0]
+                .GetProperty("content")
+                .GetProperty("parts")[0]
+                .GetProperty("text")
+                .GetString();
+        }
+        catch
+        {
+            continue; // пропускаем битые чанки
+        }
+
+        if (!string.IsNullOrEmpty(chunk))
+            yield return chunk;
+    }
+}
+
         public async Task<List<string>> GetAvailableModels()
         {
             try

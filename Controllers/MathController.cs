@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using MAI.API.Services;
+using System.Text.Json;
 
 namespace MAI.API.Controllers
 {
@@ -16,6 +17,31 @@ namespace MAI.API.Controllers
             _logger = logger;
             _logger.LogInformation("MathController initialized");
         }
+
+[HttpGet("stream")]
+public async Task StreamSolution([FromQuery] string problem, CancellationToken cancellationToken)
+{
+    Response.Headers.Append("Content-Type", "text/event-stream");
+    Response.Headers.Append("Cache-Control", "no-cache");
+    Response.Headers.Append("Connection", "keep-alive");
+
+    try
+    {
+        await foreach (var chunk in _geminiService.SolveProblemStreamAsync(problem)
+                           .WithCancellation(cancellationToken))
+        {
+            if (cancellationToken.IsCancellationRequested) break;
+            
+            var data = $"data: {JsonSerializer.Serialize(chunk)}\n\n";
+            await Response.WriteAsync(data, cancellationToken);
+            await Response.Body.FlushAsync(cancellationToken);
+        }
+    }
+    catch (OperationCanceledException) { /* пользователь нажал Стоп — ок */ }
+
+    await Response.WriteAsync("data: [DONE]\n\n");
+    await Response.Body.FlushAsync();
+}
 
         [HttpPost("solve")]
         public async Task<IActionResult> SolveProblem([FromBody] MathRequest request)
