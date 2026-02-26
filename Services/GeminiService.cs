@@ -98,23 +98,21 @@ namespace MAI.API.Services
             
             _logger.LogInformation($"Calling Gemini API: {url.Substring(0, Math.Min(80, url.Length))}...");
 
-            // УЛУЧШЕННЫЙ ПРОМПТ - отвечает на всё!
             var systemPrompt = @"Ты — МАИ (Math AI Assistant), умный AI-помощник созданный для помощи студентам.
 
 Твои возможности:
-1. Решать математические задачи любой сложности (алгебра, геометрия, тригонометрия, математический анализ, линейная алгебра и т.д.) с подробными объяснениями и пошаговыми решениями.
-2. Решать задачи по физике, химии, информатике и другим предметам такие как программирование, теория вероятностей, статистика и т.д.
-3. Объяснять сложные концепции простым языком и конечно конкретной теорией тоже чтобы было и понятно и точно. Пояснить решения и давать интуицию, а не просто выдавать ответ
+1. Решать математические задачи любой сложности с подробными объяснениями и пошаговыми решениями.
+2. Решать задачи по физике, химии, информатике и другим предметам.
+3. Объяснять сложные концепции простым языком.
 4. Отвечать на общие вопросы
 5. Помогать с учёбой и домашними заданиями
 6. Вести дружескую беседу
 
 ВАЖНО:
-- Если это математическая/физическая задача — покажи ПОШАГОВОЕ решение с объяснениями с максимальной аналитической точностью. Не пропускай шаги и не делай предположений. Покажи все формулы, вычисления и объяснения.
+- Если это математическая/физическая задача — покажи ПОШАГОВОЕ решение с объяснениями.
 - Если это обычный вопрос — дай полезный и понятный ответ
 - Пиши на русском языке или на языке вопроса
-- Будь дружелюбным и полезным
-- Форматируй ответ для удобного чтения (используй абзацы, списки где нужно) и по возможности добавляй примеры из реальной жизни и реальных источников чтобы было достоверно";
+- Будь дружелюбным и полезным";
 
             var requestBody = new
             {
@@ -133,8 +131,8 @@ namespace MAI.API.Services
                 },
                 generationConfig = new
                 {
-                    temperature = 0.7,  // Баланс между точностью и креативностью
-                    maxOutputTokens = 2000,  // Больше токенов для развёрнутых ответов
+                    temperature = 0.7,
+                    maxOutputTokens = 2000,
                     topP = 0.95,
                     topK = 40
                 }
@@ -151,7 +149,6 @@ namespace MAI.API.Services
                 _logger.LogError($"API Error: Status: {response.StatusCode}");
                 _logger.LogError($"Response: {responseText}");
                 
-                // Парсим ошибку
                 try
                 {
                     var errorJson = JsonSerializer.Deserialize<JsonElement>(responseText);
@@ -166,7 +163,7 @@ namespace MAI.API.Services
                 }
                 catch
                 {
-                    // Если не удалось распарсить ошибку, выбрасываем общее исключение
+                    // ignore
                 }
                 
                 throw new Exception($"Gemini API вернул ошибку: {response.StatusCode}");
@@ -188,90 +185,113 @@ namespace MAI.API.Services
 
             return answer ?? string.Empty;
         }
-public async IAsyncEnumerable<string> SolveProblemStreamAsync(string problem, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
-{
-    var models = new[] { "gemini-2.0-flash", "gemini-2.5-flash" };
-    var url = $"https://generativelanguage.googleapis.com/v1beta/models/{models[0]}:streamGenerateContent?alt=sse&key={_apiKey}";
 
-    var systemPrompt = @"Ты — МАИ (Math AI Assistant), умный AI-помощник созданный для помощи студентам. Отвечай на русском языке или на языке вопроса. Если это математическая задача — покажи пошаговое решение.";
-
-    var requestBody = new
-    {
-        contents = new[]
+        // ← ИСПРАВЛЕННЫЙ МЕТОД: добавлено полное логирование
+        public async IAsyncEnumerable<string> SolveProblemStreamAsync(
+            string problem,
+            [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            new
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key={_apiKey}";
+
+            _logger.LogInformation($"Stream: starting for problem: {problem}");
+            _logger.LogInformation($"Stream: URL = {url.Substring(0, Math.Min(80, url.Length))}...");
+
+            var systemPrompt = @"Ты — МАИ (Math AI Assistant), умный AI-помощник созданный для помощи студентам. 
+Отвечай на русском языке или на языке вопроса. 
+Если это математическая задача — покажи пошаговое решение.";
+
+            var requestBody = new
             {
-                parts = new[]
+                contents = new[]
                 {
-                    new { text = $"{systemPrompt}\n\nВопрос: {problem}" }
+                    new
+                    {
+                        parts = new[]
+                        {
+                            new { text = $"{systemPrompt}\n\nВопрос: {problem}" }
+                        }
+                    }
+                },
+                generationConfig = new
+                {
+                    temperature = 0.7,
+                    maxOutputTokens = 2000,
+                }
+            };
+
+            var json = JsonSerializer.Serialize(requestBody);
+            var httpContent = new StringContent(json, Encoding.UTF8, "application/json");
+
+            using var client = new HttpClient();
+            client.Timeout = TimeSpan.FromSeconds(120);
+
+            HttpResponseMessage response;
+            try
+            {
+                response = await client.PostAsync(url, httpContent, cancellationToken);
+                _logger.LogInformation($"Stream: Gemini responded with status {response.StatusCode}");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError($"Stream: HTTP request failed: {ex.Message}");
+                yield break;
+            }
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
+                _logger.LogError($"Stream: Gemini error {response.StatusCode}: {errorBody}");
+                yield break;
+            }
+
+            using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            using var reader = new System.IO.StreamReader(stream);
+
+            int lineCount = 0;
+            int chunkCount = 0;
+
+            while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
+            {
+                var line = await reader.ReadLineAsync();
+                if (line == null) break;
+
+                lineCount++;
+                _logger.LogInformation($"Stream line [{lineCount}]: {line}");
+
+                if (!line.StartsWith("data: ")) continue;
+
+                var data = line.Substring(6).Trim();
+                if (data == "[DONE]") break;
+
+                string? chunk = null;
+                try
+                {
+                    var jsonElement = JsonSerializer.Deserialize<JsonElement>(data);
+                    chunk = jsonElement
+                        .GetProperty("candidates")[0]
+                        .GetProperty("content")
+                        .GetProperty("parts")[0]
+                        .GetProperty("text")
+                        .GetString();
+                }
+                catch (Exception ex)
+                {
+                    // ← теперь логируем ошибку парсинга
+                    _logger.LogWarning($"Stream: parse error on line [{lineCount}]: {ex.Message}");
+                    _logger.LogWarning($"Stream: failed data = {data}");
+                    continue;
+                }
+
+                if (!string.IsNullOrEmpty(chunk))
+                {
+                    chunkCount++;
+                    _logger.LogInformation($"Stream: yielding chunk [{chunkCount}], length={chunk.Length}");
+                    yield return chunk;
                 }
             }
-        },
-        generationConfig = new
-        {
-            temperature = 0.7,
-            maxOutputTokens = 2000,
+
+            _logger.LogInformation($"Stream: finished. Total lines={lineCount}, chunks={chunkCount}");
         }
-    };
-
-    var json = JsonSerializer.Serialize(requestBody);
-    var content = new StringContent(json, Encoding.UTF8, "application/json");
-
-    // Используем отдельный клиент без таймаута для стриминга
-    using var client = new HttpClient();
-    client.Timeout = TimeSpan.FromSeconds(120);
-
-    HttpResponseMessage response;
-    try
-    {
-        response = await client.PostAsync(url, content, cancellationToken);
-    }
-    catch (Exception ex)
-    {
-        _logger.LogError($"Stream request failed: {ex.Message}");
-        yield break;
-    }
-
-    if (!response.IsSuccessStatusCode)
-    {
-        _logger.LogError($"Stream API error: {response.StatusCode}");
-        yield break;
-    }
-
-    using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-    using var reader = new System.IO.StreamReader(stream);
-
-    while (!reader.EndOfStream && !cancellationToken.IsCancellationRequested)
-    {
-        var line = await reader.ReadLineAsync();
-        if (line == null) break;
-        
-        // SSE формат: "data: {...json...}"
-        if (!line.StartsWith("data: ")) continue;
-        
-        var data = line.Substring(6).Trim();
-        if (data == "[DONE]") break;
-
-        string? chunk = null;
-        try
-        {
-            var jsonElement = JsonSerializer.Deserialize<JsonElement>(data);
-            chunk = jsonElement
-                .GetProperty("candidates")[0]
-                .GetProperty("content")
-                .GetProperty("parts")[0]
-                .GetProperty("text")
-                .GetString();
-        }
-        catch
-        {
-            continue; // пропускаем битые чанки
-        }
-
-        if (!string.IsNullOrEmpty(chunk))
-            yield return chunk;
-    }
-}
 
         public async Task<List<string>> GetAvailableModels()
         {
