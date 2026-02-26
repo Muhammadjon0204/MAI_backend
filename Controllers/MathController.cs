@@ -24,6 +24,7 @@ public async Task StreamSolution([FromQuery] string problem, CancellationToken c
     Response.Headers.Append("Content-Type", "text/event-stream");
     Response.Headers.Append("Cache-Control", "no-cache");
     Response.Headers.Append("Connection", "keep-alive");
+     Response.Headers.Append("X-Accel-Buffering", "no");
 
     try
     {
